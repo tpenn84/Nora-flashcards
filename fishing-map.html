@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fishing Hotspots 🎣</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<style>
+  :root {
+    --deep: #08211a;
+    --lake: #0f3d31;
+    --mid: #12664f;
+    --water: #2bb3a3;
+    --foam: #e6fbf5;
+    --coral: #ff6b6b;
+    --sun: #ffd93d;
+    --wood: #8a5a34;
+    --white: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    min-height: 100vh;
+    background: linear-gradient(160deg, var(--deep) 0%, var(--lake) 55%, var(--mid) 100%);
+    font-family: 'Nunito', sans-serif;
+    color: var(--white);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 12px 40px;
+  }
+  header { text-align: center; margin-bottom: 14px; }
+  .title {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(1.6rem, 5vw, 2.4rem);
+    color: var(--sun);
+    text-shadow: 0 3px 20px rgba(255,217,61,0.35);
+  }
+  .subtitle {
+    color: var(--water);
+    font-size: 0.8rem;
+    font-weight: 800;
+    margin-top: 2px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .stats-bar {
+    display: flex;
+    gap: 18px;
+    justify-content: center;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .stat {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 6px 14px;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .stat b { color: var(--sun); font-size: 0.95rem; }
+
+  .app {
+    width: min(1200px, 100%);
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 14px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+  }
+
+  #map {
+    width: 100%;
+    height: 460px;
+    border-radius: 14px;
+    z-index: 1;
+  }
+  .map-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 0.82rem;
+    border: none;
+    border-radius: 999px;
+    padding: 9px 16px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+    white-space: nowrap;
+  }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary { background: linear-gradient(135deg, var(--water), #0f8f7c); color: var(--white); box-shadow: 0 8px 20px rgba(43,179,163,0.35); }
+  .btn-ghost { background: rgba(255,255,255,0.1); color: var(--white); border: 2px solid rgba(255,255,255,0.18); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.18); }
+  .btn-ghost.active { background: var(--water); border-color: var(--water); color: var(--deep); }
+  .btn-danger { background: rgba(255,107,107,0.18); color: #ffb3b3; border: 2px solid rgba(255,107,107,0.35); }
+  .btn-danger:hover { background: rgba(255,107,107,0.28); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tab-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 2px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.7);
+    font-weight: 800;
+    font-size: 0.8rem;
+    padding: 10px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .tab-btn.active { background: var(--water); color: var(--deep); border-color: var(--water); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  label { display: block; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: rgba(255,255,255,0.6); margin: 12px 0 6px; }
+  label:first-child { margin-top: 0; }
+  input[type="text"], input[type="date"], input[type="number"], select, textarea {
+    width: 100%;
+    background: rgba(255,255,255,0.08);
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 9px 12px;
+    color: var(--white);
+    font-family: 'Nunito', sans-serif;
+    font-size: 0.9rem;
+  }
+  select option { color: #000; }
+  textarea { resize: vertical; min-height: 60px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .photo-drop {
+    border: 2px dashed rgba(255,255,255,0.25);
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+  }
+  .photo-drop:hover { border-color: var(--water); }
+  .photo-drop img { max-width: 100%; max-height: 160px; border-radius: 10px; margin-top: 8px; }
+  .photo-hint { font-size: 0.78rem; color: rgba(255,255,255,0.55); margin-top: 4px; }
+
+  .location-status {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .location-status.found { background: rgba(107,203,119,0.15); color: #a5d6a7; }
+  .location-status.picking { background: rgba(255,217,61,0.15); color: var(--sun); }
+
+  .save-btn { width: 100%; margin-top: 14px; padding: 12px; font-size: 0.95rem; }
+
+  .catch-list { max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .catch-card {
+    display: flex;
+    gap: 10px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 8px;
+    cursor: pointer;
+    align-items: center;
+  }
+  .catch-card:hover { background: rgba(255,255,255,0.11); }
+  .catch-card img { width: 58px; height: 58px; object-fit: cover; border-radius: 10px; flex-shrink: 0; background: rgba(0,0,0,0.2); }
+  .catch-info { flex: 1; min-width: 0; }
+  .catch-species { font-weight: 800; font-size: 0.9rem; color: var(--sun); }
+  .catch-meta { font-size: 0.75rem; color: rgba(255,255,255,0.6); margin-top: 2px; }
+  .catch-notes { font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .catch-del { background: none; border: none; color: rgba(255,107,107,0.7); font-size: 1rem; cursor: pointer; padding: 6px; flex-shrink: 0; }
+  .catch-del:hover { color: var(--coral); }
+  .empty-state { text-align: center; padding: 30px 10px; color: rgba(255,255,255,0.45); font-size: 0.88rem; }
+
+  .popup-photo { width: 100%; max-width: 200px; border-radius: 8px; margin-bottom: 6px; display: block; }
+  .popup-title { font-weight: 800; font-size: 0.95rem; margin-bottom: 2px; }
+  .popup-meta { font-size: 0.78rem; color: #555; }
+  .popup-notes { font-size: 0.8rem; margin-top: 4px; }
+
+  .toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-80px);
+    background: linear-gradient(135deg, var(--water), #0f8f7c);
+    color: white;
+    font-weight: 800;
+    font-size: 0.85rem;
+    padding: 10px 20px;
+    border-radius: 999px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    z-index: 9999;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.error { background: linear-gradient(135deg, var(--coral), #d64545); }
+
+  .footer-note { text-align: center; font-size: 0.7rem; color: rgba(255,255,255,0.35); margin-top: 18px; max-width: 600px; }
+  #importFile { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">🎣 Fishing Hotspots</div>
+  <div class="subtitle">Snap it, pin it, find your spots</div>
+  <div class="stats-bar">
+    <div class="stat">🐟 <b id="statTotal">0</b> catches</div>
+    <div class="stat">🏆 <b id="statTop">—</b> top spot</div>
+    <div class="stat">🎯 <b id="statSpecies">0</b> species</div>
+  </div>
+</header>
+
+<div class="app">
+  <div class="panel">
+    <div id="map"></div>
+    <div class="map-controls">
+      <button class="btn btn-ghost active" id="viewPins" onclick="setMapView('pins')">📍 Pins</button>
+      <button class="btn btn-ghost" id="viewHeat" onclick="setMapView('heat')">🔥 Hotspots</button>
+      <button class="btn btn-ghost" onclick="locateMe()">🧭 My Location</button>
+      <button class="btn btn-ghost" onclick="fitAllPins()">🔍 Fit All</button>
+      <button class="btn btn-ghost" onclick="exportData()">⬇️ Backup</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">⬆️ Restore</button>
+      <input type="file" id="importFile" accept="application/json" onchange="importData(event)">
+      <button class="btn btn-danger" onclick="clearAll()">🗑️ Clear All</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="tabs">
+      <button class="tab-btn active" id="tabAddBtn" onclick="switchTab('add')">➕ Add Catch</button>
+      <button class="tab-btn" id="tabListBtn" onclick="switchTab('list')">📋 My Catches</button>
+    </div>
+
+    <div class="tab-content active" id="tabAdd">
+      <label>Photo</label>
+      <div class="photo-drop" onclick="document.getElementById('photoInput').click()">
+        <div id="photoPlaceholder">📷 Tap to add a photo</div>
+        <img id="photoPreview" style="display:none">
+        <div class="photo-hint">We'll try to read GPS location from the photo automatically</div>
+      </div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(event)">
+
+      <label>Species</label>
+      <select id="speciesSelect" onchange="toggleCustomSpecies()">
+        <option>Largemouth Bass</option>
+        <option>Smallmouth Bass</option>
+        <option>Trout</option>
+        <option>Catfish</option>
+        <option>Salmon</option>
+        <option>Walleye</option>
+        <option>Pike</option>
+        <option>Crappie</option>
+        <option>Bluegill</option>
+        <option>Perch</option>
+        <option>Other / Custom</option>
+      </select>
+      <input type="text" id="customSpecies" placeholder="Enter species name" style="display:none; margin-top:8px;">
+
+      <div class="row2">
+        <div>
+          <label>Date Caught</label>
+          <input type="date" id="dateCaught">
+        </div>
+        <div>
+          <label>Weight (optional)</label>
+          <input type="text" id="weight" placeholder="e.g. 3.5 lbs">
+        </div>
+      </div>
+
+      <label>Notes (bait, weather, story...)</label>
+      <textarea id="notes" placeholder="What did you catch it on?"></textarea>
+
+      <label>Location</label>
+      <div class="map-controls">
+        <button class="btn btn-primary" type="button" onclick="locateMeForForm()">🧭 Use My Location</button>
+        <button class="btn btn-ghost" type="button" id="pickOnMapBtn" onclick="togglePickOnMap()">🗺️ Pick on Map</button>
+      </div>
+      <div class="location-status" id="locationStatus">📍 No location set yet</div>
+
+      <button class="btn btn-primary save-btn" onclick="saveCatch()">🎣 Save This Catch</button>
+    </div>
+
+    <div class="tab-content" id="tabList">
+      <div class="catch-list" id="catchList">
+        <div class="empty-state">No catches logged yet. Add your first one!</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer-note">Everything is stored privately in this browser (no server, no account). Use "Backup" regularly to export a JSON file so you never lose your catch log, especially before switching devices or browsers.</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/leaflet-heat/leaflet-heat.js"></script>
+<script src="vendor/exif-js/exif.js"></script>
+<script>
+const STORAGE_KEY = 'fishingCatches_v1';
+let catches = loadCatches();
+let pendingPhoto = null;
+let pendingLocation = null;
+let pickModeActive = false;
+let editingId = null;
+
+function loadCatches() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function persistCatches() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(catches));
+    return true;
+  } catch (e) {
+    showToast('⚠️ Storage full — export a backup and delete old catches', true);
+    return false;
+  }
+}
+
+// ---------- Map setup ----------
+const map = L.map('map', { zoomControl: true }).setView([39.5, -98.35], 4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const markerLayer = L.layerGroup().addTo(map);
+let heatLayer = null;
+let pickMarker = null;
+
+function fishIcon() {
+  return L.divIcon({
+    className: 'fish-marker',
+    html: '<div style="font-size:26px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">🎣</div>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 26],
+    popupAnchor: [0, -24]
+  });
+}
+
+function renderMap() {
+  markerLayer.clearLayers();
+  const points = [];
+  catches.forEach(c => {
+    if (typeof c.lat !== 'number' || typeof c.lng !== 'number') return;
+    points.push([c.lat, c.lng, 1]);
+    const marker = L.marker([c.lat, c.lng], { icon: fishIcon() });
+    const photoHtml = c.photo ? `<img class="popup-photo" src="${c.photo}">` : '';
+    marker.bindPopup(`
+      <div>
+        ${photoHtml}
+        <div class="popup-title">${escapeHtml(c.species)}</div>
+        <div class="popup-meta">${c.dateCaught || ''} ${c.weight ? '· ' + escapeHtml(c.weight) : ''}</div>
+        ${c.notes ? `<div class="popup-notes">${escapeHtml(c.notes)}</div>` : ''}
+      </div>
+    `);
+    marker.addTo(markerLayer);
+  });
+
+  if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+  if (points.length) {
+    heatLayer = L.heatLayer(points, { radius: 35, blur: 25, maxZoom: 12 });
+  }
+  applyMapView();
+}
+
+function setMapView(mode) {
+  document.getElementById('viewPins').classList.toggle('active', mode === 'pins');
+  document.getElementById('viewHeat').classList.toggle('active', mode === 'heat');
+  localStorage.setItem('fishingMapView', mode);
+  applyMapView();
+}
+
+function applyMapView() {
+  const mode = localStorage.getItem('fishingMapView') || 'pins';
+  document.getElementById('viewPins').classList.toggle('active', mode === 'pins');
+  document.getElementById('viewHeat').classList.toggle('active', mode === 'heat');
+  if (mode === 'heat') {
+    map.removeLayer(markerLayer);
+    if (heatLayer) heatLayer.addTo(map);
+  } else {
+    if (heatLayer) map.removeLayer(heatLayer);
+    markerLayer.addTo(map);
+  }
+}
+
+function fitAllPins() {
+  const pts = catches.filter(c => typeof c.lat === 'number').map(c => [c.lat, c.lng]);
+  if (!pts.length) { showToast('No pinned catches yet'); return; }
+  map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 });
+}
+
+function locateMe() {
+  if (!navigator.geolocation) { showToast('Geolocation not supported', true); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    map.setView([pos.coords.latitude, pos.coords.longitude], 12);
+  }, () => showToast('Could not get your location', true));
+}
+
+map.on('click', (e) => {
+  if (!pickModeActive) return;
+  setFormLocation(e.latlng.lat, e.latlng.lng, 'Picked on map');
+  togglePickOnMap();
+});
+
+function togglePickOnMap() {
+  pickModeActive = !pickModeActive;
+  const btn = document.getElementById('pickOnMapBtn');
+  btn.classList.toggle('active', pickModeActive);
+  const status = document.getElementById('locationStatus');
+  if (pickModeActive) {
+    status.className = 'location-status picking';
+    status.textContent = '👆 Tap anywhere on the map to drop a pin';
+  } else if (!pendingLocation) {
+    status.className = 'location-status';
+    status.textContent = '📍 No location set yet';
+  }
+}
+
+// ---------- Form: species ----------
+function toggleCustomSpecies() {
+  const sel = document.getElementById('speciesSelect');
+  document.getElementById('customSpecies').style.display = sel.value === 'Other / Custom' ? 'block' : 'none';
+}
+
+// ---------- Form: photo + EXIF ----------
+function handlePhotoSelect(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxDim = 900;
+      let w = img.width, h = img.height;
+      if (w > h && w > maxDim) { h = h * (maxDim / w); w = maxDim; }
+      else if (h > maxDim) { w = w * (maxDim / h); h = maxDim; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      pendingPhoto = canvas.toDataURL('image/jpeg', 0.65);
+      document.getElementById('photoPreview').src = pendingPhoto;
+      document.getElementById('photoPreview').style.display = 'block';
+      document.getElementById('photoPlaceholder').style.display = 'none';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+
+  try {
+    EXIF.getData(file, function () {
+      const lat = EXIF.getTag(this, 'GPSLatitude');
+      const lon = EXIF.getTag(this, 'GPSLongitude');
+      const latRef = EXIF.getTag(this, 'GPSLatitudeRef') || 'N';
+      const lonRef = EXIF.getTag(this, 'GPSLongitudeRef') || 'W';
+      if (lat && lon) {
+        const dd = dmsToDD(lat, latRef, lon, lonRef);
+        if (dd) setFormLocation(dd.lat, dd.lng, 'Found in photo');
+      }
+    });
+  } catch (e) { /* exif not available, ignore */ }
+}
+
+function dmsToDD(latDMS, latRef, lonDMS, lonRef) {
+  const toDD = (dms, ref) => {
+    let dd = dms[0] + dms[1] / 60 + dms[2] / 3600;
+    if (ref === 'S' || ref === 'W') dd *= -1;
+    return dd;
+  };
+  const lat = toDD(latDMS, latRef);
+  const lng = toDD(lonDMS, lonRef);
+  if (isNaN(lat) || isNaN(lng)) return null;
+  return { lat, lng };
+}
+
+// ---------- Form: location ----------
+function locateMeForForm() {
+  if (!navigator.geolocation) { showToast('Geolocation not supported', true); return; }
+  const status = document.getElementById('locationStatus');
+  status.className = 'location-status';
+  status.textContent = '⏳ Getting your location...';
+  navigator.geolocation.getCurrentPosition(pos => {
+    setFormLocation(pos.coords.latitude, pos.coords.longitude, 'Your current location');
+  }, () => {
+    status.className = 'location-status';
+    status.textContent = '⚠️ Could not get your location — try picking on the map';
+  });
+}
+
+function setFormLocation(lat, lng, sourceLabel) {
+  pendingLocation = { lat, lng };
+  const status = document.getElementById('locationStatus');
+  status.className = 'location-status found';
+  status.textContent = `✅ ${sourceLabel} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+  if (pickMarker) map.removeLayer(pickMarker);
+  pickMarker = L.marker([lat, lng], { icon: fishIcon() }).addTo(map);
+  map.setView([lat, lng], 12);
+}
+
+// ---------- Save / delete ----------
+function saveCatch() {
+  const speciesSelect = document.getElementById('speciesSelect').value;
+  const species = speciesSelect === 'Other / Custom'
+    ? (document.getElementById('customSpecies').value.trim() || 'Unknown')
+    : speciesSelect;
+  const dateCaught = document.getElementById('dateCaught').value || new Date().toISOString().slice(0, 10);
+  const weight = document.getElementById('weight').value.trim();
+  const notes = document.getElementById('notes').value.trim();
+
+  if (!pendingLocation) {
+    showToast('⚠️ Please set a location first', true);
+    return;
+  }
+
+  const entry = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    species, dateCaught, weight, notes,
+    lat: pendingLocation.lat, lng: pendingLocation.lng,
+    photo: pendingPhoto,
+    createdAt: new Date().toISOString()
+  };
+
+  catches.unshift(entry);
+  if (!persistCatches()) { catches.shift(); return; }
+
+  resetForm();
+  renderMap();
+  renderList();
+  updateStats();
+  showToast('🎣 Catch saved!');
+  switchTab('list');
+}
+
+function deleteCatchById(id) {
+  if (!confirm('Delete this catch?')) return;
+  catches = catches.filter(c => c.id !== id);
+  persistCatches();
+  renderMap();
+  renderList();
+  updateStats();
+}
+
+function resetForm() {
+  pendingPhoto = null;
+  pendingLocation = null;
+  document.getElementById('photoInput').value = '';
+  document.getElementById('photoPreview').style.display = 'none';
+  document.getElementById('photoPlaceholder').style.display = 'block';
+  document.getElementById('speciesSelect').selectedIndex = 0;
+  document.getElementById('customSpecies').style.display = 'none';
+  document.getElementById('customSpecies').value = '';
+  document.getElementById('dateCaught').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('weight').value = '';
+  document.getElementById('notes').value = '';
+  const status = document.getElementById('locationStatus');
+  status.className = 'location-status';
+  status.textContent = '📍 No location set yet';
+  if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
+}
+
+// ---------- List ----------
+function renderList() {
+  const list = document.getElementById('catchList');
+  if (!catches.length) {
+    list.innerHTML = '<div class="empty-state">No catches logged yet. Add your first one!</div>';
+    return;
+  }
+  list.innerHTML = '';
+  catches.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'catch-card';
+    card.innerHTML = `
+      ${c.photo ? `<img src="${c.photo}">` : `<div style="width:58px;height:58px;border-radius:10px;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;">🐟</div>`}
+      <div class="catch-info">
+        <div class="catch-species">${escapeHtml(c.species)}</div>
+        <div class="catch-meta">${c.dateCaught || ''} ${c.weight ? '· ' + escapeHtml(c.weight) : ''}</div>
+        ${c.notes ? `<div class="catch-notes">${escapeHtml(c.notes)}</div>` : ''}
+      </div>
+      <button class="catch-del" title="Delete">🗑️</button>
+    `;
+    card.querySelector('.catch-del').onclick = (e) => { e.stopPropagation(); deleteCatchById(c.id); };
+    card.onclick = () => {
+      if (typeof c.lat === 'number') {
+        const mode = localStorage.getItem('fishingMapView') || 'pins';
+        if (mode === 'heat') setMapView('pins');
+        map.setView([c.lat, c.lng], 14);
+        markerLayer.eachLayer(m => {
+          const ll = m.getLatLng();
+          if (Math.abs(ll.lat - c.lat) < 1e-6 && Math.abs(ll.lng - c.lng) < 1e-6) m.openPopup();
+        });
+      }
+    };
+    list.appendChild(card);
+  });
+}
+
+function switchTab(tab) {
+  document.getElementById('tabAdd').classList.toggle('active', tab === 'add');
+  document.getElementById('tabList').classList.toggle('active', tab === 'list');
+  document.getElementById('tabAddBtn').classList.toggle('active', tab === 'add');
+  document.getElementById('tabListBtn').classList.toggle('active', tab === 'list');
+}
+
+// ---------- Stats ----------
+function updateStats() {
+  document.getElementById('statTotal').textContent = catches.length;
+  const speciesSet = new Set(catches.map(c => c.species));
+  document.getElementById('statSpecies').textContent = speciesSet.size;
+
+  if (!catches.length) { document.getElementById('statTop').textContent = '—'; return; }
+  const buckets = {};
+  catches.forEach(c => {
+    if (typeof c.lat !== 'number') return;
+    const key = c.lat.toFixed(2) + ',' + c.lng.toFixed(2);
+    buckets[key] = (buckets[key] || 0) + 1;
+  });
+  const entries = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
+  document.getElementById('statTop').textContent = entries.length ? `${entries[0][1]} catch${entries[0][1] === 1 ? '' : 'es'}` : '—';
+}
+
+// ---------- Backup / restore ----------
+function exportData() {
+  const blob = new Blob([JSON.stringify(catches, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fishing-catches-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('⬇️ Backup downloaded');
+}
+
+function importData(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('bad format');
+      const existingIds = new Set(catches.map(c => c.id));
+      const merged = imported.filter(c => !existingIds.has(c.id));
+      catches = [...merged, ...catches];
+      persistCatches();
+      renderMap();
+      renderList();
+      updateStats();
+      showToast(`✅ Restored ${merged.length} catches`);
+    } catch (err) {
+      showToast('⚠️ Could not read that backup file', true);
+    }
+    evt.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function clearAll() {
+  if (!catches.length) return;
+  if (!confirm('Delete ALL catches? This cannot be undone. Consider exporting a backup first.')) return;
+  catches = [];
+  persistCatches();
+  renderMap();
+  renderList();
+  updateStats();
+  showToast('🗑️ All catches cleared');
+}
+
+// ---------- Utils ----------
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+let toastTimer = null;
+function showToast(msg, isError) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2800);
+}
+
+// ---------- Init ----------
+document.getElementById('dateCaught').value = new Date().toISOString().slice(0, 10);
+renderMap();
+renderList();
+updateStats();
+if (catches.length) fitAllPins();
+</script>
+
+</body>
+</html>
